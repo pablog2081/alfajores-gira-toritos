@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Pedir alfajores — Gira Toritos</title>
+<link rel="icon" href="assets/logo.jpg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="field">
+  <div class="wrap">
+    <div class="crest"><img src="assets/logo.jpg" alt="Escudo Fútbol Club GEI"></div>
+    <div>
+      <span class="eyebrow">Fútbol Club GEI · Gira Santa Teresita</span>
+      <h1>Pedir alfajores</h1>
+    </div>
+  </div>
+</div>
+
+<main>
+  <div class="panel">
+
+    <div id="form-view">
+      <a class="back-link" href="index.html">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 12H5M11 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Volver al inicio
+      </a>
+      <p style="color:var(--ink-soft); margin-top:0;">Elegí tu nombre de la lista y la cantidad de docenas que querés pedir.</p>
+
+      <div class="error-box" id="error-box"></div>
+
+      <form id="pedido-form">
+        <div class="field-group">
+          <label for="nombre">Nombre y apellido del Torito</label>
+          <select id="nombre" name="nombre" required>
+            <option value="" selected disabled>Elegí tu nombre...</option>
+          </select>
+          <div class="hint" id="viajeros-hint">Elegilo de la lista.</div>
+        </div>
+
+        <div class="field-group">
+          <label for="docenas">Cantidad de docenas de alfajores</label>
+          <input type="number" id="docenas" name="docenas" min="1" step="1" placeholder="Ej: 2" required>
+        </div>
+
+        <button type="submit" class="btn" id="submit-btn">Confirmar pedido</button>
+      </form>
+    </div>
+
+    <div id="confirm-view" class="confirm" style="display:none;">
+      <div class="check">
+        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 13l4 4L19 7" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <h2>¡Pedido confirmado!</h2>
+      <p>Ya anotamos tu pedido de alfajores.</p>
+      <div class="summary">
+        <div><span>Torito</span><strong id="c-nombre"></strong></div>
+        <div><span>Docenas pedidas</span><strong id="c-docenas"></strong></div>
+      </div>
+      <p style="font-size:0.88rem;">Cuando se rinda la venta, alguien de la comisión va a subir el comprobante de pago.</p>
+      <a class="btn secondary" href="index.html" style="margin-top:0.6rem;">Volver al inicio</a>
+    </div>
+
+  </div>
+</main>
+
+<footer>Gira Toritos Santa Teresita — hecho con ⚽ para las familias del club.</footer>
+
+<script src="config.js"></script>
+<script src="roster.js"></script>
+<script>
+  const nombreInput = document.getElementById('nombre');
+  const viajerosHint = document.getElementById('viajeros-hint');
+  const errorBox = document.getElementById('error-box');
+  let viajerosCargados = [];
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.classList.add('show');
+  }
+  function hideError() {
+    errorBox.classList.remove('show');
+  }
+
+  function pintarLista(nombres) {
+    viajerosCargados = nombres || [];
+    const opciones = viajerosCargados.map(n => `<option value="${n.replace(/"/g, '&quot;')}">${n}</option>`).join('');
+    nombreInput.innerHTML = '<option value="" selected disabled>Elegí tu nombre...</option>' + opciones;
+  }
+
+  // Mostramos ya mismo la lista de respaldo (siempre disponible) y, si se
+  // puede, la reemplazamos por la versión más actualizada del Apps Script.
+  pintarLista(typeof TORITOS_ROSTER !== 'undefined' ? TORITOS_ROSTER : []);
+
+  if (WEBAPP_URL.indexOf('PEGAR_AQUI') === -1) {
+    fetch(WEBAPP_URL + '?action=viajeros')
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok || !data.viajeros || !data.viajeros.length) throw new Error('vacio');
+        pintarLista(data.viajeros);
+      })
+      .catch(() => { /* seguimos con la lista de respaldo */ });
+  } else {
+    viajerosHint.textContent = 'Vista previa: todavía no está conectada la planilla, así que se usa la lista guardada del plantel.';
+  }
+
+  document.getElementById('pedido-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    hideError();
+
+    const nombre = nombreInput.value.trim();
+    const docenas = Number(document.getElementById('docenas').value);
+
+    if (!nombre) { showError('Ingresá tu nombre y apellido.'); return; }
+    if (viajerosCargados.length && !viajerosCargados.includes(nombre)) {
+      showError('Ese nombre no está en la lista de Toritos. Revisá que esté escrito igual, o avisale a la comisión si falta.');
+      return;
+    }
+    if (!docenas || docenas <= 0) { showError('Ingresá una cantidad de docenas mayor a 0.'); return; }
+
+    if (WEBAPP_URL.indexOf('PEGAR_AQUI') !== -1) {
+      showError('La página todavía no está conectada al sistema (falta configurar el link). Avisale a quien la armó.');
+      return;
+    }
+
+    const btn = document.getElementById('submit-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Enviando...';
+
+    fetch(WEBAPP_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'pedido', nombre: nombre, docenas: docenas })
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok) throw new Error(data.error || 'error');
+        document.getElementById('c-nombre').textContent = data.nombre;
+        document.getElementById('c-docenas').textContent = data.docenas;
+        document.getElementById('form-view').style.display = 'none';
+        document.getElementById('confirm-view').style.display = 'block';
+      })
+      .catch(() => {
+        showError('No se pudo enviar el pedido. Revisá tu conexión e intentá de nuevo.');
+        btn.disabled = false;
+        btn.textContent = 'Confirmar pedido';
+      });
+  });
+</script>
+
+</body>
+</html>

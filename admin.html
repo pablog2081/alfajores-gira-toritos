@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Administración — Gira Toritos</title>
+<link rel="icon" href="assets/logo.jpg">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Manrope:wght@400;500;700;800&display=swap">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="field">
+  <div class="wrap">
+    <div class="crest"><img src="assets/logo.jpg" alt="Escudo Fútbol Club GEI"></div>
+    <div>
+      <span class="eyebrow">Fútbol Club GEI · Gira Santa Teresita</span>
+      <h1>Administración</h1>
+    </div>
+  </div>
+</div>
+
+<main>
+
+  <div class="panel" id="login-view">
+    <a class="back-link" href="index.html">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 12H5M11 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Volver al inicio
+    </a>
+    <p style="color:var(--ink-soft); margin-top:0;">Ingresá la clave de administración para ver los pedidos.</p>
+    <div class="error-box" id="login-error"></div>
+    <form id="login-form">
+      <div class="field-group">
+        <label for="clave">Clave de administrador</label>
+        <input type="password" id="clave" name="clave" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn" id="login-btn">Ingresar</button>
+    </form>
+  </div>
+
+  <div id="admin-view" style="display:none;">
+
+    <a class="back-link" href="index.html">
+      <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M19 12H5M11 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Volver al inicio
+    </a>
+
+    <div class="demo-banner" id="demo-banner" style="display:none;">Vista previa con datos de ejemplo — todavía no está conectada la planilla real.</div>
+
+    <div class="stat-row">
+      <div class="stat"><div class="n" id="s-pedidos">–</div><div class="l">Pedidos</div></div>
+      <div class="stat"><div class="n" id="s-docenas">–</div><div class="l">Docenas pedidas</div></div>
+      <div class="stat"><div class="n" id="s-entregados">–</div><div class="l">Entregados</div></div>
+      <div class="stat"><div class="n" id="s-rendidos">–</div><div class="l">Rendidos</div></div>
+      <div class="stat"><div class="n" id="s-pendientes-validar">–</div><div class="l">Comprobantes por revisar</div></div>
+    </div>
+
+    <div class="panel">
+      <div class="toolbar">
+        <strong style="font-family:'Fraunces',serif; font-size:1.15rem;">Pedidos</strong>
+        <div style="display:flex; gap:0.6rem; flex-wrap:wrap;">
+          <button class="btn secondary" id="refresh-btn" style="width:auto; padding:0.55rem 1rem;">Actualizar</button>
+          <a class="btn" id="reporte-link" href="#" style="width:auto; padding:0.55rem 1rem; text-decoration:none;">Descargar reporte Excel</a>
+        </div>
+      </div>
+
+      <div class="error-box" id="admin-error"></div>
+
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Torito</th>
+              <th>Docenas</th>
+              <th>Entregado</th>
+              <th>Rendido</th>
+              <th>Fecha pedido</th>
+            </tr>
+          </thead>
+          <tbody id="pedidos-body">
+            <tr><td colspan="5" style="color:var(--ink-soft);">Cargando...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<footer>Gira Toritos Santa Teresita — panel de administración.</footer>
+
+<script src="config.js"></script>
+<script>
+  let claveActual = '';
+  let modoDemo = false;
+
+  const PEDIDOS_EJEMPLO = [
+    { fila: 2, timestamp: new Date(), nombre: 'GROSSELLI LUCCA JENNARO (ejemplo)', docenas: 2, entregado: false, rendido: false, comprobantePendiente: false, linkComprobante: '' },
+    { fila: 3, timestamp: new Date(), nombre: 'ABALO JUAN SEGUNDO (ejemplo)', docenas: 1, entregado: true, rendido: true, comprobantePendiente: false, linkComprobante: '' },
+    { fila: 4, timestamp: new Date(), nombre: 'SODA FELIPE (ejemplo)', docenas: 3, entregado: false, rendido: false, comprobantePendiente: true, linkComprobante: 'https://drive.google.com/ejemplo' }
+  ];
+
+  function showLoginError(msg) {
+    const box = document.getElementById('login-error');
+    box.textContent = msg; box.classList.add('show');
+  }
+  function showAdminError(msg) {
+    const box = document.getElementById('admin-error');
+    box.textContent = msg; box.classList.add('show');
+  }
+  function hideAdminError() {
+    document.getElementById('admin-error').classList.remove('show');
+  }
+
+  function fmtFecha(v) {
+    if (!v) return '—';
+    const d = new Date(v);
+    if (isNaN(d)) return String(v);
+    return d.toLocaleDateString('es-AR') + ' ' + d.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  document.getElementById('login-form').addEventListener('submit', function (e) {
+    e.preventDefault();
+    document.getElementById('login-error').classList.remove('show');
+
+    const clave = document.getElementById('clave').value;
+
+    // Vista previa: como todavía no hay Apps Script conectado, dejamos entrar
+    // con la clave ya configurada en Code.gs para que puedas ver cómo queda el
+    // panel, con datos de ejemplo (aclarados como tales).
+    if (WEBAPP_URL.indexOf('PEGAR_AQUI') !== -1) {
+      if (clave !== 'toritos2026') { showLoginError('Clave incorrecta. (Vista previa: la clave configurada es "toritos2026".)'); return; }
+      modoDemo = true;
+      claveActual = clave;
+      entrarAlPanel();
+      return;
+    }
+
+    const btn = document.getElementById('login-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Verificando...';
+
+    fetch(WEBAPP_URL, { method: 'POST', body: JSON.stringify({ action: 'login', clave: clave }) })
+      .then(r => r.json())
+      .then(data => {
+        btn.disabled = false; btn.textContent = 'Ingresar';
+        if (!data.ok) { showLoginError('Clave incorrecta.'); return; }
+        modoDemo = false;
+        claveActual = clave;
+        entrarAlPanel();
+      })
+      .catch(() => {
+        btn.disabled = false; btn.textContent = 'Ingresar';
+        showLoginError('No se pudo verificar la clave. Revisá tu conexión.');
+      });
+  });
+
+  function entrarAlPanel() {
+    document.getElementById('login-view').style.display = 'none';
+    document.getElementById('admin-view').style.display = 'block';
+    document.getElementById('demo-banner').style.display = modoDemo ? 'block' : 'none';
+    document.getElementById('reporte-link').href = modoDemo ? 'javascript:void(0)' : (WEBAPP_URL + '?action=reporte&clave=' + encodeURIComponent(claveActual));
+    if (modoDemo) {
+      document.getElementById('reporte-link').addEventListener('click', function () {
+        alert('El reporte en Excel se descarga una vez que esté conectado el Apps Script real.');
+      });
+    }
+    cargarTodo();
+  }
+
+  function cargarTodo() {
+    cargarResumen();
+    cargarPedidos();
+  }
+
+  function calcularResumen(pedidos) {
+    let totalDocenas = 0, entregados = 0, rendidos = 0, pendientesValidar = 0;
+    pedidos.forEach(p => {
+      totalDocenas += Number(p.docenas) || 0;
+      if (p.entregado) entregados++;
+      if (p.rendido) rendidos++;
+      if (p.comprobantePendiente && !p.rendido) pendientesValidar++;
+    });
+    return { totalPedidos: pedidos.length, totalDocenas, entregados, rendidos, pendientesValidar };
+  }
+
+  function pintarResumen(r) {
+    document.getElementById('s-pedidos').textContent = r.totalPedidos;
+    document.getElementById('s-docenas').textContent = r.totalDocenas;
+    document.getElementById('s-entregados').textContent = r.entregados;
+    document.getElementById('s-rendidos').textContent = r.rendidos;
+    document.getElementById('s-pendientes-validar').textContent = r.pendientesValidar;
+  }
+
+  function cargarResumen() {
+    if (modoDemo) { pintarResumen(calcularResumen(PEDIDOS_EJEMPLO)); return; }
+    fetch(WEBAPP_URL + '?action=resumen')
+      .then(r => r.json())
+      .then(data => { if (data.ok) pintarResumen(data); });
+  }
+
+  function cargarPedidos() {
+    hideAdminError();
+    const body = document.getElementById('pedidos-body');
+    body.innerHTML = '<tr><td colspan="5" style="color:var(--ink-soft);">Cargando...</td></tr>';
+
+    if (modoDemo) { pintarPedidos(PEDIDOS_EJEMPLO); return; }
+
+    fetch(WEBAPP_URL + '?action=pedidos&clave=' + encodeURIComponent(claveActual))
+      .then(r => r.json())
+      .then(data => {
+        if (!data.ok) { showAdminError('No se pudieron cargar los pedidos.'); body.innerHTML = ''; return; }
+        pintarPedidos(data.pedidos);
+      })
+      .catch(() => { showAdminError('No se pudieron cargar los pedidos. Revisá tu conexión.'); body.innerHTML = ''; });
+  }
+
+  function pintarPedidos(pedidos) {
+    const body = document.getElementById('pedidos-body');
+    if (!pedidos.length) {
+      body.innerHTML = '<tr><td colspan="5" style="color:var(--ink-soft);">Todavía no hay pedidos.</td></tr>';
+      return;
+    }
+    body.innerHTML = pedidos.map(p => `
+          <tr>
+            <td>${escapeHtml(p.nombre)}</td>
+            <td class="num">${p.docenas}</td>
+            <td>
+              <label class="checkbox-toggle">
+                <input type="checkbox" data-fila="${p.fila}" ${p.entregado ? 'checked' : ''} onchange="marcarEntregado(this)">
+                ${p.entregado ? '<span class="pill ok">Entregado</span>' : '<span class="pill pend">Pendiente</span>'}
+              </label>
+            </td>
+            <td>
+              <label class="checkbox-toggle">
+                <input type="checkbox" data-fila="${p.fila}" ${p.rendido ? 'checked' : ''} onchange="marcarRendido(this)">
+                ${p.rendido ? '<span class="pill ok">Rendido</span>' : (p.comprobantePendiente ? '<span class="pill pend">Por revisar</span>' : '<span class="pill pend">Sin rendir</span>')}
+              </label>
+              ${(!p.rendido && p.comprobantePendiente && p.linkComprobante) ? `<div style="margin-top:0.3rem;"><a href="${p.linkComprobante}" target="_blank" rel="noopener" style="font-size:0.8rem; font-weight:700; color:var(--blue);">Ver comprobante ↗</a></div>` : ''}
+              ${(!p.rendido && !p.comprobantePendiente) ? `<div class="hint" style="margin-top:0.25rem;">Tildá si pagó en efectivo</div>` : ''}
+            </td>
+            <td>${fmtFecha(p.timestamp)}</td>
+          </tr>
+        `).join('');
+  }
+
+  function marcarEntregado(checkbox) {
+    const fila = Number(checkbox.getAttribute('data-fila'));
+    const entregado = checkbox.checked;
+
+    if (modoDemo) {
+      const p = PEDIDOS_EJEMPLO.find(x => x.fila === fila);
+      if (p) p.entregado = entregado;
+      cargarTodo();
+      return;
+    }
+
+    checkbox.disabled = true;
+    fetch(WEBAPP_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'marcarEntregado', clave: claveActual, fila: fila, entregado: entregado })
+    })
+      .then(r => r.json())
+      .then(data => {
+        checkbox.disabled = false;
+        if (!data.ok) { alert('No se pudo actualizar. Probá de nuevo.'); return; }
+        cargarTodo();
+      })
+      .catch(() => { checkbox.disabled = false; alert('No se pudo actualizar. Revisá tu conexión.'); });
+  }
+
+  function marcarRendido(checkbox) {
+    const fila = Number(checkbox.getAttribute('data-fila'));
+    const rendido = checkbox.checked;
+
+    if (rendido && !confirm('¿Confirmás que este pedido está pagado y rendido? Si subieron un comprobante, revisalo antes de confirmar.')) {
+      checkbox.checked = false;
+      return;
+    }
+
+    if (modoDemo) {
+      const p = PEDIDOS_EJEMPLO.find(x => x.fila === fila);
+      if (p) { p.rendido = rendido; if (rendido) p.comprobantePendiente = false; }
+      cargarTodo();
+      return;
+    }
+
+    checkbox.disabled = true;
+    fetch(WEBAPP_URL, {
+      method: 'POST',
+      body: JSON.stringify({ action: 'marcarRendido', clave: claveActual, fila: fila, rendido: rendido })
+    })
+      .then(r => r.json())
+      .then(data => {
+        checkbox.disabled = false;
+        if (!data.ok) { alert('No se pudo actualizar. Probá de nuevo.'); return; }
+        cargarTodo();
+      })
+      .catch(() => { checkbox.disabled = false; alert('No se pudo actualizar. Revisá tu conexión.'); });
+  }
+
+  function escapeHtml(str) {
+    return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  document.getElementById('refresh-btn').addEventListener('click', cargarTodo);
+</script>
+
+</body>
+</html>
